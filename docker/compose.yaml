@@ -1,19 +1,18 @@
 services:
 
-  jupyter:
-    image: jupyter/datascience-notebook
-    container_name: jupyter_reto1
-    ports:
-      - "8888:8888"
+  python:
+    image: python:3.12
+    container_name: python_reto1
     volumes:
-      - ./notebooks:/home/jovyan/work
-    working_dir: /home/jovyan/work
+      - ./python:/app
+    working_dir: /app
+    command: tail -f /dev/null
     networks:
       - shared-network
 
   redis:
     image: redis:7.2
-    container_name: redis-server
+    container_name: redis-server2
     ports:
       - "6379:6379"
     volumes:
@@ -26,7 +25,7 @@ services:
 
   mongo:
     image: ${MONGO_IMAGE_VERSION:-mongo:6.0}
-    container_name: ${MONGO_CONTAINER_NAME:-mongo}
+    container_name: ${MONGO_CONTAINER_NAME:-mongo2}
     restart: unless-stopped
     ports:
       - "${MONGO_PORT:-27017}:27017"
@@ -47,7 +46,7 @@ services:
 
   mongo-express:
     image: ${MONGO_EXPRESS_IMAGE_VERSION:-mongo-express:1.0.2}
-    container_name: ${MONGO_EXPRESS_CONTAINER_NAME:-mongo-express}
+    container_name: ${MONGO_EXPRESS_CONTAINER_NAME:-mongo-express2}
     restart: unless-stopped
     depends_on:
       mongo:
@@ -67,7 +66,6 @@ services:
 
 volumes:
   redis-data:
-
 
 networks:
   shared-network:
