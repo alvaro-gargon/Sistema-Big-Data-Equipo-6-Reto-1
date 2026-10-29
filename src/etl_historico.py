@@ -27,8 +27,9 @@ def descargar_csv(url):
 # Funcion para descargar Json y cargar los dastos en un dataframe de pandas
 def descargar_json(url):
 # Se lee el json de la fuente correspondiente
-    respuesta = requests.get(url)
+    respuesta = request.get(url)
     if respuesta.status_code == 200:
+        datos_json = respuesta.json()
     # Descargamos el archivo
         with open('archivo_descargado.json', 'w', encoding='utf-8') as f:
             json.dump(datos_json, f, ensure_ascii=False, indent=4)
