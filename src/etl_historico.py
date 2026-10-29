@@ -1,11 +1,14 @@
 import io
 import requests as request
 import pandas as pd
+import json
 
+# Funcion para descargar csv y cargar los datos en un dataframe de pandas
 #descarga=request.get("/data/admisiones_historico")
 
 #with open('../data/admisiones_historico.csv', 'wb') as f:
 #   f.write(descarga.content)
+
 
 df_csv = pd.read_csv(
     "../data/admisiones_historico.csv",
@@ -18,3 +21,16 @@ df_csv = pd.read_csv(
 
 print("DataFrame leído:")
 print(df_csv)
+
+# Funcion para descargar Json y cargar los dastos en un dataframe de pandas
+def descargar_json(url):
+# Se lee el json de la fuente correspondiente
+    respuesta = requests.get(url)
+    if respuesta.status_code == 200:
+    # Descargamos el archivo
+        with open('archivo_descargado.json', 'w', encoding='utf-8') as f:
+            json.dump(datos_json, f, ensure_ascii=False, indent=4)
+        print('¡JSON descargado y guardado con éxito!')
+    else:
+        print(f'Error en la petición: {respuesta.status_code}')
+
