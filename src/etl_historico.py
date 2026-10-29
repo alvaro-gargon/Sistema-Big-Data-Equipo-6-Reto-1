@@ -18,3 +18,5 @@ df_csv = pd.read_csv(
 
 print("DataFrame leído:")
 print(df_csv)
+
+print(pd.__version__)
