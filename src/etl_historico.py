@@ -6,7 +6,7 @@ import json
 # Funcion para descargar csv y cargar los datos en un dataframe de pandas
 def descargar_csv(url):
     ### Lineas comentadas para su funcionamiento en uso local, se descomentarán en el servidor
-    #descarga=request.get("/data/admisiones_historico")
+    #descarga=request.get("/data/admisiones_historico.csv")
 
     #with open('../data/admisiones_historico.csv', 'wb') as f:
     #   f.write(descarga.content)
