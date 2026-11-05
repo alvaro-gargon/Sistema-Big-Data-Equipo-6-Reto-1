@@ -67,4 +67,32 @@ auditoria = auditar(df_csv)
 print(auditoria)
 
 
-#def gestionar_valores_nulos(df):
+def gestionar_valores_nulos(df):
+    validos = (
+        df["timestamp_llegada"].notna()
+        & df["timestamp_alta"].notna()
+        & (df["timestamp_alta"] > df["timestamp_llegada"])
+        & df["frecuencia_cardiaca"].notna()
+        & df["tension_arterial"].notna()
+    )   
+
+    estancia_media = (
+        df.loc[validos, "timestamp_alta"] - df.loc[validos, "timestamp_llegada"]
+    ).mean() 
+    # Caso falta llegada, existe alta
+    caso1 = df["timestamp_llegada"].isna() & df["timestamp_alta"].notna()
+    df.loc[caso1, "timestamp_llegada"] = df.loc[caso1, "timestamp_alta"] - estancia_media
+
+    # Caso falta alta, existe llegada
+    caso2 = df["timestamp_alta"].isna() & df["timestamp_llegada"].notna()
+    df.loc[caso2, "timestamp_alta"] = df.loc[caso2, "timestamp_llegada"] + estancia_media
+
+    # Caso falta frecuencia cardiaca
+    caso3 = df["frecuencia_cardiaca"].isna()
+    df.loc[caso3,"frecuencia_cardiaca"]=df.loc[validos,"frecuencia_cardiaca"].mean()
+
+    # Caso falta tension arterial
+    caso4 = df["tension_arterial"].isna()
+    df.loc[caso4,"tension_arterial"]=df.loc[validos,"frecuencia_cardiaca"].mean()
+
+    return df
