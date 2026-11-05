@@ -43,7 +43,7 @@ def descargar_json(url):
     else:
         print(f'Error en la petición: {respuesta.status_code}')
 
-descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
+#descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
 
 df_csv = pd.read_csv(
         RUTA_CSV,
@@ -62,12 +62,13 @@ def auditar(df):
         "unicos": df.nunique(),      # TODO
     })
 
-print(df_csv.info())
-auditoria = auditar(df_csv)
-print(auditoria)
 
-
+# Funcion que cambia los valores nulos cuando es posible por distintas calculaciones de medias o medianas
+# fecha llegada, fecha alta, frecuancia cardiaca, tension arterial
 def gestionar_valores_nulos(df):
+    df["timestamp_llegada"] = pd.to_datetime(df["timestamp_llegada"],dayfirst=True,format="mixed",utc=True,errors="coerce")
+    df["timestamp_alta"] = pd.to_datetime(df["timestamp_alta"],dayfirst=True,format="mixed",utc=True,errors="coerce")
+    df["tension_arterial"] =pd.to_numeric
     validos = (
         df["timestamp_llegada"].notna()
         & df["timestamp_alta"].notna()
@@ -89,10 +90,17 @@ def gestionar_valores_nulos(df):
 
     # Caso falta frecuencia cardiaca
     caso3 = df["frecuencia_cardiaca"].isna()
-    df.loc[caso3,"frecuencia_cardiaca"]=df.loc[validos,"frecuencia_cardiaca"].mean()
+    df.loc[caso3,"frecuencia_cardiaca"]=df.loc[validos,"frecuencia_cardiaca"].median()
 
     # Caso falta tension arterial
     caso4 = df["tension_arterial"].isna()
-    df.loc[caso4,"tension_arterial"]=df.loc[validos,"frecuencia_cardiaca"].mean()
+    df.loc[caso4,"tension_arterial"]=df.loc[validos,"frecuencia_cardiaca"].median()
 
     return df
+
+
+auditoria = auditar(df_csv)
+print(auditoria)
+gestionar_valores_nulos(df_csv)
+auditoria = auditar(df_csv)
+print(auditoria)
