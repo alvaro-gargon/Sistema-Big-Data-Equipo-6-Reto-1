@@ -158,9 +158,9 @@ def cruce_datos(df_csv):
 def carga_inicial_mongo(df_cruzados):
     documentos = df_cruzados.where(pd.notnull(df_cruzados), None).to_dict(orient="records")
 
-    cliente = MongoClient(CONEXIONMONGO)
-    db = cliente[BD]
-    coleccion = db[COLECCION]
+    cliente = MongoClient(config.CONEXIONMONGO)
+    db = cliente[config.BD]
+    coleccion = db[config.COLECCION]
 
     if documentos:
         coleccion.insert_many(documentos)
