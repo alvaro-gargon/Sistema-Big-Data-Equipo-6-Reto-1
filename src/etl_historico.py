@@ -2,18 +2,24 @@ import io
 import requests as request
 import pandas as pd
 import json
+from pathlib import Path
 
+
+RUTA_DATA = Path(__file__).resolve().parent.parent / "data"
+RUTA_CSV = RUTA_DATA / "admisiones_historico.csv"
 # Funcion para descargar csv y cargar los datos en un dataframe de pandas
 def descargar_csv(url):
-    ### Lineas comentadas para su funcionamiento en uso local, se descomentarán en el servidor
-    #descarga=request.get("/data/admisiones_historico.csv")
+    ### Lineas comentadas para el funcionamiento en uso local, se descomentarán en el servidor
+    
+    
+    descarga=request.get(url,timeout=30)
+    descarga.raise_for_status()
 
-    #with open('../data/admisiones_historico.csv', 'wb') as f:
-    #   f.write(descarga.content)
-    ###
+    with open(RUTA_CSV, 'wb') as f:
+       f.write(descarga.content)
 
     df_csv = pd.read_csv(
-        "../data/admisiones_historico.csv",
+        RUTA_CSV,
         index_col="id_episodio", 
         na_values=["ERROR", "SIN_DATO", "N/D", "s/d", "NULL"], 
         on_bad_lines='warn', 
@@ -37,4 +43,64 @@ def descargar_json(url):
     else:
         print(f'Error en la petición: {respuesta.status_code}')
 
+#descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
 
+df_csv = pd.read_csv(
+        RUTA_CSV,
+        index_col="id_episodio", 
+        na_values=["ERROR", "SIN_DATO", "N/D", "s/d", "NULL"], 
+        on_bad_lines='warn', 
+        engine='python', 
+        parse_dates=["timestamp_llegada","timestamp_alta"],
+        dayfirst=True)
+
+def auditar(df):
+    return pd.DataFrame({
+        "tipo": df.dtypes.astype(str),        # TODO
+        "nulos": df.isna().sum(),       # TODO
+        "pct_nulos": ((df.isna().mean())*100).round(1),   # TODO
+        "unicos": df.nunique(),      # TODO
+    })
+
+
+# Funcion que cambia los valores nulos cuando es posible por distintas calculaciones de medias o medianas
+# fecha llegada, fecha alta, frecuancia cardiaca, tension arterial
+def gestionar_valores_nulos(df):
+    df["timestamp_llegada"] = pd.to_datetime(df["timestamp_llegada"],dayfirst=True,format="mixed",utc=True,errors="coerce")
+    df["timestamp_alta"] = pd.to_datetime(df["timestamp_alta"],dayfirst=True,format="mixed",utc=True,errors="coerce")
+    df["tension_arterial"] =pd.to_numeric
+    validos = (
+        df["timestamp_llegada"].notna()
+        & df["timestamp_alta"].notna()
+        & (df["timestamp_alta"] > df["timestamp_llegada"])
+        & df["frecuencia_cardiaca"].notna()
+        & df["tension_arterial"].notna()
+    )   
+
+    estancia_media = (
+        df.loc[validos, "timestamp_alta"] - df.loc[validos, "timestamp_llegada"]
+    ).mean() 
+    # Caso falta llegada, existe alta
+    caso1 = df["timestamp_llegada"].isna() & df["timestamp_alta"].notna()
+    df.loc[caso1, "timestamp_llegada"] = df.loc[caso1, "timestamp_alta"] - estancia_media
+
+    # Caso falta alta, existe llegada
+    caso2 = df["timestamp_alta"].isna() & df["timestamp_llegada"].notna()
+    df.loc[caso2, "timestamp_alta"] = df.loc[caso2, "timestamp_llegada"] + estancia_media
+
+    # Caso falta frecuencia cardiaca
+    caso3 = df["frecuencia_cardiaca"].isna()
+    df.loc[caso3,"frecuencia_cardiaca"]=df.loc[validos,"frecuencia_cardiaca"].median()
+
+    # Caso falta tension arterial
+    caso4 = df["tension_arterial"].isna()
+    df.loc[caso4,"tension_arterial"]=df.loc[validos,"frecuencia_cardiaca"].median()
+
+    return df
+
+
+auditoria = auditar(df_csv)
+print(auditoria)
+gestionar_valores_nulos(df_csv)
+auditoria = auditar(df_csv)
+print(auditoria)
