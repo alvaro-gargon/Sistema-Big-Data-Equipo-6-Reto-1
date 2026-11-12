@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import json
 from pathlib import Path
+from pymongo import MongoClient
+import config
 
 
 RUTA_DATA = Path(__file__).resolve().parent.parent / "data"
@@ -28,8 +30,8 @@ def descargar_csv(url):
         parse_dates=["timestamp_llegada","timestamp_alta"],
         dayfirst=True)
 
-    print("DataFrame leído:")
-    print(df_csv)
+    print("DataFrame leído")
+    return df_csv
 
 # Funcion para descargar Json y cargar los dastos en un dataframe de pandas
 def descargar_json(url):
@@ -43,17 +45,6 @@ def descargar_json(url):
         print('¡JSON descargado y guardado con éxito!')
     else:
         print(f'Error en la petición: {respuesta.status_code}')
-
-#descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
-
-df_csv = pd.read_csv(
-        RUTA_CSV,
-        index_col="id_episodio", 
-        na_values=["ERROR", "SIN_DATO", "N/D", "s/d", "NULL"], 
-        on_bad_lines='warn', 
-        engine='python', 
-        parse_dates=["timestamp_llegada","timestamp_alta"],
-        dayfirst=True)
 
 def auditar(df):
     return pd.DataFrame({
@@ -69,7 +60,9 @@ def auditar(df):
 def gestionar_valores_nulos(df):
     df["timestamp_llegada"] = pd.to_datetime(df["timestamp_llegada"],dayfirst=True,format="mixed",utc=True,errors="coerce")
     df["timestamp_alta"] = pd.to_datetime(df["timestamp_alta"],dayfirst=True,format="mixed",utc=True,errors="coerce")
-    df["tension_arterial"] =pd.to_numeric
+    df["tension_arterial"] =pd.to_numeric(
+        df["tension_arterial"], errors="coerce"
+    )
     validos = (
         df["timestamp_llegada"].notna()
         & df["timestamp_alta"].notna()
@@ -95,21 +88,14 @@ def gestionar_valores_nulos(df):
 
     # Caso falta tension arterial
     caso4 = df["tension_arterial"].isna()
-    df.loc[caso4,"tension_arterial"]=df.loc[validos,"frecuencia_cardiaca"].median()
+    df.loc[caso4,"tension_arterial"]=df.loc[validos,"tension_arterial"].median()
 
     return df
 
-
-auditoria = auditar(df_csv)
-print(auditoria)
-gestionar_valores_nulos(df_csv)
-auditoria = auditar(df_csv)
-print(auditoria)
 # Función para eliminar los datos duplicados del csv.
 def elimina_duplicados(df):
-    df.drop_duplicates(subset=["id_episodio","sip_paciente","timestamp_llegada","timestamp_alta"])
+    df = df[~df.index.duplicated(keep="first")]
     return df
-
 
 # Función que comprueba las fechas de alta y las corrige si son anteriores a la de llegada
 def corrige_fecha_alta(df):
@@ -139,7 +125,7 @@ def corrige_fecha_alta(df):
 
 # Función para gestionar las frecuencias cardiacas fuera de rango
 def frecuencias_fuera_rango(df):
-    pd.to_numeric(df["frecuencia_cardiaca"], erros="coerce")
+    pd.to_numeric(df["frecuencia_cardiaca"], errors="coerce")
 
     Q1 = df["frecuencia_cardiaca"].quantile(0.25)
     Q3 = df["frecuencia_cardiaca"].quantile(0.75)
@@ -158,3 +144,35 @@ def frecuencias_fuera_rango(df):
     )
 
     return df
+
+def cruce_datos(df_csv):
+    with open("../data/partes_clinicos.json", "r", encoding="utf-8") as archivo:
+        datos_json = json.load(archivo)
+
+    df_json = pd.DataFrame(datos_json)
+
+    df_cruzados = pd.merge(df_csv, df_json, left_index=True, right_on="id_episodio", how="left")
+
+    return df_cruzados
+
+def carga_inicial_mongo(df_cruzados):
+    documentos = df_cruzados.where(pd.notnull(df_cruzados), None).to_dict(orient="records")
+
+    cliente = MongoClient(CONEXIONMONGO)
+    db = cliente[BD]
+    coleccion = db[COLECCION]
+
+    if documentos:
+        coleccion.insert_many(documentos)
+
+def main():
+    df_csv = descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
+    descargar_json("http://10.201.59.248:8088/partes_clinicos.json")
+
+    df_csv = frecuencias_fuera_rango(df_csv)
+    df_csv = corrige_fecha_alta(df_csv)
+    df_csv = gestionar_valores_nulos(df_csv)
+    df_csv = elimina_duplicados(df_csv)
+
+    df_cruzados = cruce_datos(df_csv)
+    carga_inicial_mongo(df_cruzados)
