@@ -54,41 +54,62 @@ def auditar(df):
         "unicos": df.nunique(),      # TODO
     })
 
+FORMATOS_FECHA = [
+    "%d/%m/%Y %H:%M:%S",   # 30/08/2026 20:13:06
+    "%d/%m/%Y %I:%M %p",   # 02/09/2026 01:26 PM
+    "%d/%m/%Y %H:%M",      # por si aparece sin segundos
+    "%Y/%m/%d %H:%M:%S",   # 2026/09/22 23:55:13
+    "%Y-%m-%d %H:%M:%S",   # 2026-09-23 09:31:13
+]
+
+def parsear_fechas(serie):
+    s = serie.astype("string").str.strip()
+    resultado = pd.Series(pd.NaT, index=s.index, dtype="datetime64[ns]")
+    for fmt in FORMATOS_FECHA:
+        pendientes = resultado.isna() & s.notna()
+        if not pendientes.any():
+            break
+        resultado.loc[pendientes] = pd.to_datetime(
+            s[pendientes], format=fmt, errors="coerce"
+        )
+    sin_parsear = s.notna() & resultado.isna()
+    if sin_parsear.any():
+        print(f"{serie.name}: {sin_parsear.sum()} valores sin parsear, ej.:",
+              s[sin_parsear].unique()[:5])
+    return resultado.dt.tz_localize("UTC")
+
+def parsear_tension(df):
+    ta = (df["tension_arterial"].astype("string")
+          .str.extract(r"(\d+)\D+(\d+)"))   # acepta "/", "_", "-", etc.
+    df["tension_sistolica"] = pd.to_numeric(ta[0], errors="coerce")
+    df["tension_diastolica"] = pd.to_numeric(ta[1], errors="coerce")
+    return df.drop(columns="tension_arterial")
 
 # Funcion que cambia los valores nulos cuando es posible por distintas calculaciones de medias o medianas
 # fecha llegada, fecha alta, frecuancia cardiaca, tension arterial
 def gestionar_valores_nulos(df):
-    df["timestamp_llegada"] = pd.to_datetime(df["timestamp_llegada"],dayfirst=True,format="mixed",utc=True,errors="coerce")
-    df["timestamp_alta"] = pd.to_datetime(df["timestamp_alta"],dayfirst=True,format="mixed",utc=True,errors="coerce")
-    df["tension_arterial"] =pd.to_numeric(
-        df["tension_arterial"], errors="coerce"
-    )
-    validos = (
-        df["timestamp_llegada"].notna()
-        & df["timestamp_alta"].notna()
-        & (df["timestamp_alta"] > df["timestamp_llegada"])
-        & df["frecuencia_cardiaca"].notna()
-        & df["tension_arterial"].notna()
-    )   
+    df = df.copy()
+    df["timestamp_llegada"] = parsear_fechas(df["timestamp_llegada"])
+    df["timestamp_alta"] = parsear_fechas(df["timestamp_alta"])
+    df["frecuencia_cardiaca"] = pd.to_numeric(df["frecuencia_cardiaca"], errors="coerce")
+    df = parsear_tension(df)
 
-    estancia_media = (
-        df.loc[validos, "timestamp_alta"] - df.loc[validos, "timestamp_llegada"]
-    ).mean() 
-    # Caso falta llegada, existe alta
+    fechas_ok = (df["timestamp_llegada"].notna()
+                 & df["timestamp_alta"].notna()
+                 & (df["timestamp_alta"] > df["timestamp_llegada"]))
+    if not fechas_ok.any():
+        raise ValueError("Ninguna fila con fechas válidas")
+    estancia_media = (df.loc[fechas_ok, "timestamp_alta"]
+                      - df.loc[fechas_ok, "timestamp_llegada"]).mean()
+
     caso1 = df["timestamp_llegada"].isna() & df["timestamp_alta"].notna()
     df.loc[caso1, "timestamp_llegada"] = df.loc[caso1, "timestamp_alta"] - estancia_media
 
-    # Caso falta alta, existe llegada
     caso2 = df["timestamp_alta"].isna() & df["timestamp_llegada"].notna()
     df.loc[caso2, "timestamp_alta"] = df.loc[caso2, "timestamp_llegada"] + estancia_media
 
-    # Caso falta frecuencia cardiaca
-    caso3 = df["frecuencia_cardiaca"].isna()
-    df.loc[caso3,"frecuencia_cardiaca"]=df.loc[validos,"frecuencia_cardiaca"].median()
-
-    # Caso falta tension arterial
-    caso4 = df["tension_arterial"].isna()
-    df.loc[caso4,"tension_arterial"]=df.loc[validos,"tension_arterial"].median()
+    for col in ["frecuencia_cardiaca", "tension_sistolica", "tension_diastolica"]:
+        df[col] = df[col].fillna(df[col].median())
 
     return df
 
@@ -99,12 +120,6 @@ def elimina_duplicados(df):
 
 # Función que comprueba las fechas de alta y las corrige si son anteriores a la de llegada
 def corrige_fecha_alta(df):
-    df["timestamp_llegada"] = pd.to_datetime(
-        df["timestamp_llegada"], errors="coerce"
-    )
-    df["timestamp_alta"] = pd.to_datetime(
-        df["timestamp_alta"], errors="coerce"
-    )
 
     validos = df["timestamp_alta"] > df["timestamp_llegada"]
 
@@ -158,21 +173,28 @@ def cruce_datos(df_csv):
 def carga_inicial_mongo(df_cruzados):
     documentos = df_cruzados.where(pd.notnull(df_cruzados), None).to_dict(orient="records")
 
-    cliente = MongoClient(CONEXIONMONGO)
-    db = cliente[BD]
-    coleccion = db[COLECCION]
-
+    cliente = MongoClient(config.CONEXIONMONGO)
+    db = cliente[config.BD]
+    coleccion = db[config.COLECCION]
+    print(config.CONEXIONMONGO)
+    print(config.BD)
+    print(config.COLECCION)
     if documentos:
+        df_cruzados = df_cruzados.astype(object).where(df_cruzados.notna(), None)
+        documentos = df_cruzados.to_dict("records")
         coleccion.insert_many(documentos)
+        print("Documentos insertados")
 
 def main():
     df_csv = descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
     descargar_json("http://10.201.59.248:8088/partes_clinicos.json")
 
-    df_csv = frecuencias_fuera_rango(df_csv)
-    df_csv = corrige_fecha_alta(df_csv)
-    df_csv = gestionar_valores_nulos(df_csv)
     df_csv = elimina_duplicados(df_csv)
+    df_csv = frecuencias_fuera_rango(df_csv)
+    df_csv = gestionar_valores_nulos(df_csv)
+    df_csv = corrige_fecha_alta(df_csv)
+    
 
     df_cruzados = cruce_datos(df_csv)
     carga_inicial_mongo(df_cruzados)
+main()
