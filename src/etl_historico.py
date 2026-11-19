@@ -10,6 +10,7 @@ import config
 
 RUTA_DATA = Path(__file__).resolve().parent.parent / "data"
 RUTA_CSV = RUTA_DATA / "admisiones_historico.csv"
+RUTA_JSON = RUTA_DATA / "partes_clinicos.json"
 # Funcion para descargar csv y cargar los datos en un dataframe de pandas
 def descargar_csv(url):
     ### Lineas comentadas para el funcionamiento en uso local, se descomentarán en el servidor
@@ -40,7 +41,7 @@ def descargar_json(url):
     if respuesta.status_code == 200:
         datos_json = respuesta.json()
     # Descargamos el archivo
-        with open('archivo_descargado.json', 'w', encoding='utf-8') as f:
+        with open(RUTA_JSON, 'w', encoding='utf-8') as f:
             json.dump(datos_json, f, ensure_ascii=False, indent=4)
         print('¡JSON descargado y guardado con éxito!')
     else:
