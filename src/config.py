@@ -1,3 +1,3 @@
-CONEXIONMONGO='mongodb://localhost:27017/'
-BD='Sistema triaje'
+CONEXIONMONGO='mongodb://root:secret@mongo:27017/?authSource=admin'
+BD='Sistema_triaje'
 COLECCION='Episodios'
