@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from pymongo import MongoClient
 import config
+import analytics_mongo as analytics
 
 
 RUTA_DATA = Path(__file__).resolve().parent.parent / "data"
@@ -18,7 +19,7 @@ def descargar_csv(url):
     
     descarga=request.get(url,timeout=30)
     descarga.raise_for_status()
-
+    
     with open(RUTA_CSV, 'wb') as f:
        f.write(descarga.content)
 
@@ -187,15 +188,76 @@ def carga_inicial_mongo(df_cruzados):
         print("Documentos insertados")
 
 def main():
-    df_csv = descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
-    descargar_json("http://10.201.59.248:8088/partes_clinicos.json")
 
-    df_csv = elimina_duplicados(df_csv)
-    df_csv = frecuencias_fuera_rango(df_csv)
-    df_csv = gestionar_valores_nulos(df_csv)
-    df_csv = corrige_fecha_alta(df_csv)
-    
+    while True:
+        print("\n===== MENÚ PRINCIPAL =====")
+        print("1. Ejecutar aplicación normal")
+        print("2. Consultar tiempo medio de estancia")
+        print("3. Consultar distribución de destinos por edad")
+        print("0. Salir")
 
-    df_cruzados = cruce_datos(df_csv)
-    carga_inicial_mongo(df_cruzados)
-main()
+        opcion = input("Selecciona una opción: ")
+
+        if opcion == "1":
+            df_csv = descargar_csv("http://10.201.59.248:8088/admisiones_historico.csv")
+            descargar_json("http://10.201.59.248:8088/partes_clinicos.json")
+
+            df_csv = elimina_duplicados(df_csv)
+            df_csv = frecuencias_fuera_rango(df_csv)
+            df_csv = gestionar_valores_nulos(df_csv)
+            df_csv = corrige_fecha_alta(df_csv)
+
+            df_cruzados = cruce_datos(df_csv)
+            carga_inicial_mongo(df_cruzados)
+
+        elif opcion == "2":
+            if analytics.coleccion.count_documents({}) == 0:
+                print("No hay datos en MongoDB. Ejecuta primero la aplicación.")
+            else:
+                resultados = analytics.tiempo_medio_estancia()
+
+                print(f"\n{'CATEGORÍA':<25} {'TIEMPO MEDIO (MIN)':>20}")
+                print("-" * 47)
+
+                for resultado in resultados:
+                    categoria = resultado['_id'] or "Sin categoría"
+                    tiempo = resultado['tiempo_medio']
+
+                    if tiempo is not None:
+                        print(f"{categoria:<25} {tiempo:>20.2f}")
+                    else:
+                        print(f"{categoria:<25} {'Sin datos':>20}")
+
+        elif opcion == "3":
+            if analytics.coleccion.count_documents({}) == 0:
+                print("No hay datos en MongoDB. Ejecuta primero la aplicación.")
+            else:
+                resultados = analytics.distribucion_destinos_edad()
+
+                print("\n===== DISTRIBUCIÓN DE DESTINOS POR EDAD =====")
+                print(f"\n{'GRUPO DE EDAD':<25} {'DESTINO':<20} {'PORCENTAJE':>12}")
+                print("-" * 59)
+
+                for resultado in resultados:
+                    grupo = resultado['grupo_edad'] or "Sin grupo"
+                    destino = resultado['destino'] or "Sin destino"
+                    porcentaje = resultado['porcentaje']
+
+                    if porcentaje is not None:
+                        print(
+                            f"{grupo:<25} "
+                            f"{destino:<20} "
+                            f"{porcentaje:>11.2f}%"
+                        )
+                    else:
+                        print(f"{grupo:<25} {destino:<20} {'Sin datos':>12}")
+
+        elif opcion == "0":
+            print("Saliendo de la aplicación...")
+            break
+
+        else:
+            print("Opción no válida.")
+
+if __name__ == "__main__":
+    main()
