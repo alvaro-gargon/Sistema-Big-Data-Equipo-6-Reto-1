@@ -22,7 +22,7 @@ def de_cola_a_box():
     mas_urgente=r.zpopmin(clave_urgencias)
     #zpopmin devuelve una tupla (datos,score)
     if mas_urgente:
-        datos=mas_urgente[0]
+        datos=mas_urgente[0][0]
         diccionario=json.loads(datos)
         manejar_hashes(diccionario)
 
