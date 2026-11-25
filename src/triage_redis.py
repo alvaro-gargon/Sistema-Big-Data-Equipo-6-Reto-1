@@ -10,6 +10,27 @@ r = redis.Redis(
 )
 # clave que se utilizara en las colas
 clave_urgencias="urgencias:cola_espera"
+
+# Guarda en Redis el documento clínico completo del paciente.
+# Se utiliza JSON porque el documento contiene diccionarios y listas.
+def guardar_documento_clinico(documento):
+    clave = f'episodio:{documento["id_episodio"]}'
+    r.set(clave, json.dumps(documento))
+
+# Recupera el documento clínico completo de un paciente.
+def obtener_documento_clinico(id_episodio):
+    clave = f'episodio:{id_episodio}'
+    datos = r.get(clave)
+
+    if datos is None:
+        return None
+
+    return json.loads(datos)
+
+# Elimina el documento clínico completo de Redis.
+def eliminar_documento_clinico(id_episodio):
+    r.delete(f'episodio:{id_episodio}')
+
 # Funcion que añade a la cola un nuevo paciente/episodio
 def añadir_cola(diccionario):
     puntuacion={
@@ -44,8 +65,14 @@ def add_boxes(num_hash,datos):
 def delete_boxes(num_hash):
     clave=f'box:{num_hash}'
     datos=r.hgetall(clave)
+
+    if not datos:
+        return None
+    
     r.delete(f'id_episodio:{datos["id_episodio"]}') #al igual que se crea la relacion, se borra (No se borra automaticamente al borrar el hash)
     r.delete('box:'+str(num_hash))
+
+    return datos
 
 def buscar_paciente(id_episodio):
     clave=r.get("id_episodio:"+str(id_episodio))
