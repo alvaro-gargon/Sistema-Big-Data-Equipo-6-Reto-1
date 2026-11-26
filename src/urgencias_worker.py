@@ -25,7 +25,7 @@ def consultar_novedades() -> dict:
 def llamamiento_api():
     while True:
         novedades=consultar_novedades()
-
+        print(novedades)
         if novedades["nuevos_ingresos"]:
             for nuevo in novedades["nuevos_ingresos"]:
 
