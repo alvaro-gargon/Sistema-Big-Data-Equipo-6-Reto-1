@@ -7,6 +7,7 @@ from pathlib import Path
 from pymongo import MongoClient
 import config
 import analytics_mongo as analytics
+from urgencias_worker import llamamiento_api
 
 
 RUTA_DATA = Path(__file__).resolve().parent.parent / "data"
@@ -209,6 +210,7 @@ def main():
 
             df_cruzados = cruce_datos(df_csv)
             carga_inicial_mongo(df_cruzados)
+            llamamiento_api()
 
         elif opcion == "2":
             if analytics.coleccion.count_documents({}) == 0:
